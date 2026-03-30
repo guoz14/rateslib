@@ -35,7 +35,6 @@ from rateslib.legs import (
     FloatLeg,
     ZeroFixedLeg,
     ZeroFloatLeg,
-    ZeroIndexLeg,
 )
 from rateslib.legs.amortization import _AmortizationType
 from rateslib.periods import (
@@ -1161,6 +1160,65 @@ class TestFloatLeg:
         )
         assert abs(result - expected) < 1e-10
 
+    def test_leg_index_base_period_on_period(self):
+        fl = FloatLeg(
+            schedule=Schedule(
+                effective=dt(2000, 1, 7),
+                termination=dt(2000, 3, 7),
+                frequency="M",
+                calendar="all",
+            ),
+            index_fixings="some",
+            index_lag=0,
+            index_base_type=LegIndexBase.PeriodOnPeriod,
+        )
+        assert fl.periods[0].index_params.index_base.date == dt(2000, 1, 7)
+        assert fl.periods[1].index_params.index_base.date == dt(2000, 2, 7)
+
+    def test_index_only_all_periods(self, curve):
+        name = str(hash(os.urandom(2)))
+        fixings.add(
+            name,
+            Series(index=[dt(2022, 1, 1), dt(2022, 2, 1), dt(2022, 3, 1)], data=[1.0, 1.1, 1.3]),
+        )
+        fl = FloatLeg(
+            schedule=Schedule(
+                effective=dt(2022, 1, 7),
+                termination=dt(2022, 3, 7),
+                frequency="M",
+                calendar="all",
+            ),
+            index_fixings=name,
+            index_lag=0,
+            index_method="monthly",
+            index_base_type=LegIndexBase.PeriodOnPeriod,
+            initial_exchange=True,
+            index_only=True,
+        )
+        result = fl.cashflows(rate_curve=curve, disc_curve=curve)
+
+        # the rates are approximately 4% and in each period inflation increases around 10% and 20%.
+        # this means the `index only` amount of each cashflows are approximately below:
+        expected = [0.0, -346.7781, -569.3935, -181818.1818]
+        for i in range(4):
+            assert abs(result.loc[i, "Cashflow"] - expected[i]) < 1e-2
+
+    def test_period_on_period_zero_periods(self):
+        fl = FloatLeg(
+            schedule=Schedule(
+                effective=dt(2000, 1, 7),
+                termination=dt(2000, 3, 7),
+                frequency="M",
+                calendar="all",
+            ),
+            zero_periods=True,
+            fixing_frequency="7d",
+            index_base_type=LegIndexBase.PeriodOnPeriod,
+            index_lag=2,
+        )
+        assert fl.periods[0].index_params.index_base.date == dt(2000, 1, 7)
+        assert fl.periods[1].index_params.index_base.date == dt(2000, 2, 7)
+
 
 class TestZeroFloatLeg:
     def test_zero_float_leg_set_float_spread(self, curve) -> None:
@@ -1434,7 +1492,7 @@ class TestZeroFloatLeg:
                     frequency="Z",
                 ),
                 notional=-1e8,
-                convention="ActAct",
+                convention="ActActISDA",
             )
 
     def test_zero_float_leg_analytic_delta(self, curve) -> None:
@@ -1446,7 +1504,7 @@ class TestZeroFloatLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             float_spread=1.0,
             fixing_series=FloatRateSeries(
                 lag=0,
@@ -1520,7 +1578,7 @@ class TestZeroFixedLeg:
                 frequency=freq,
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=rate,
         )
         result = zfl.cashflows(disc_curve=curve)
@@ -1553,7 +1611,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=2.0,
         )
         result = zfl.cashflows(disc_curve=curve)
@@ -1581,7 +1639,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=2.5,
         )
         result = zfl.npv(disc_curve=curve)
@@ -1599,7 +1657,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=2.5,
         )
         result2 = zfl.analytic_delta(disc_curve=curve)
@@ -1622,7 +1680,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=NoInput(0),
         )
         result = zfl.spread(
@@ -1644,7 +1702,7 @@ class TestZeroFixedLeg:
                 frequency="M",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             final_exchange=final_exchange,
             fixed_rate=NoInput(0),
         )
@@ -1667,7 +1725,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=NoInput(0),
         )
         with pytest.raises(ZeroDivisionError):
@@ -1689,7 +1747,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=NoInput(0),
             final_exchange=final_exchange,
             index_base=100.0,
@@ -1717,7 +1775,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=NoInput(0),
             currency="usd",
             final_exchange=final_exchange,
@@ -1746,7 +1804,7 @@ class TestZeroFixedLeg:
                     frequency="A",
                 ),
                 notional=-1e8,
-                convention="ActAct",
+                convention="ActActISDA",
                 fixed_rate=NoInput(0),
                 amortization=1.0,
             )
@@ -1761,7 +1819,7 @@ class TestZeroFixedLeg:
                     frequency="Z",
                 ),
                 notional=-1e8,
-                convention="ActAct",
+                convention="ActActISDA",
                 fixed_rate=NoInput(0),
             )
 
@@ -1774,7 +1832,7 @@ class TestZeroFixedLeg:
                 frequency="A",
             ),
             notional=-1e8,
-            convention="ActAct",
+            convention="ActActISDA",
             fixed_rate=NoInput(0),
         )
         with pytest.raises(ValueError, match="A `fixed_rate` must be set for a "):
@@ -1804,19 +1862,21 @@ class TestZeroIndexLeg:
             index_lag=3,
             interpolation="linear_index",
         )
-        zil = ZeroIndexLeg(
+        zil = ZeroFixedLeg(
             schedule=Schedule(
                 effective=dt(2022, 1, 15),
                 termination="2Y",
                 frequency="A",
             ),
+            fixed_rate=0.0,
             convention="1+",
             index_base=index_base,
             index_fixings=index_fixings,
             index_method=meth,
-            final_exchange=False,
+            final_exchange=True,
+            index_only=True,
         )
-        result = zil.cashflows(index_curve=index_curve).loc[0, "Cashflow"]
+        result = zil.cashflows(index_curve=index_curve).loc[1, "Cashflow"]
         assert abs(result - exp) < 1e-3
 
     @pytest.mark.skip(reason="v2.2 no longer permits fixing setting")
@@ -1838,19 +1898,23 @@ class TestZeroIndexLeg:
         for period in leg.periods[:1]:
             assert period.index_base == 205.0
 
-    def test_zero_analytic_delta(self, curve) -> None:
-        zil = ZeroIndexLeg(
-            schedule=Schedule(
-                effective=dt(2022, 1, 15),
-                termination="2Y",
-                frequency="A",
-            ),
-            convention="1+",
-            index_lag=0,
-            index_base=100.0,
-            index_fixings=110.0,
-        )
-        assert zil.analytic_delta(disc_curve=curve) == 0.0
+    # The following test no longer passes after ZeroIndexLeg removed from use.
+    # def test_zero_analytic_delta(self, curve) -> None:
+    #     zil = ZeroFixedLeg(
+    #         schedule=Schedule(
+    #             effective=dt(2022, 1, 15),
+    #             termination="2Y",
+    #             frequency="A",
+    #         ),
+    #         convention="1+",
+    #         index_lag=0,
+    #         index_base=100.0,
+    #         index_fixings=110.0,
+    #         index_only=True,
+    #         final_exchange=True,
+    #         fixed_rate=0.0,
+    #     )
+    #     assert zil.analytic_delta(disc_curve=curve) == 0.0
 
     def test_cashflows(self) -> None:
         index_curve = Curve(
@@ -1863,7 +1927,7 @@ class TestZeroIndexLeg:
             interpolation="linear_index",
         )
         curve = Curve({dt(2022, 1, 1): 1.0, dt(2023, 1, 1): 0.97})
-        zil = ZeroIndexLeg(
+        zil = ZeroFixedLeg(
             schedule=Schedule(
                 effective=dt(2022, 1, 15),
                 termination="2Y",
@@ -1874,17 +1938,20 @@ class TestZeroIndexLeg:
             convention="1+",
             index_lag=3,
             index_method="curve",
+            index_only=True,
+            fixed_rate=0.0,
+            final_exchange=True,
         )
         result = zil.cashflows(index_curve=index_curve, disc_curve=curve)
         expected = DataFrame(
             {
-                "Type": ["Cashflow"],  #  ["ZeroIndexLeg"],
-                "Notional": [1000000.0],
-                "Unindexed Cashflow": [-1000000.0],
-                "Index Base": [100.11863],
-                "Index Ratio": [1.06178],
-                "Cashflow": [-61782.379],
-                "NPV": [-58063.1659],  # [-58053.47605],
+                "Type": ["ZeroFixedPeriod", "Cashflow"],  #  ["ZeroIndexLeg"],
+                "Notional": [1000000.0, 1000000.0],
+                "Unindexed Cashflow": [-0.0, -1000000.0],
+                "Index Base": [100.11863, 100.11863],
+                "Index Ratio": [1.06178, 1.06178],
+                "Cashflow": [0.0, -61782.379],
+                "NPV": [0.0, -58063.1659],  # [-58053.47605],
             },
         )
         assert_frame_equal(
@@ -1904,8 +1971,8 @@ class TestZeroIndexLeg:
         )
 
     @pytest.mark.parametrize("only", [True, False])
-    def test_four_ways(self, only):
-        # A Zero Index Legs can also be created in four ways.
+    def test_three_ways(self, only):
+        # A Zero Index Legs can also be created in three ways.
         one = ZeroFixedLeg(
             schedule=Schedule(
                 effective=dt(2022, 1, 1),
@@ -1947,35 +2014,35 @@ class TestZeroIndexLeg:
         )
         result3 = three.cashflows().loc[1, "Cashflow"]
 
-        four = ZeroIndexLeg(
-            schedule=Schedule(
-                effective=dt(2022, 1, 1),
-                termination="2Y",
-                frequency="Z",
-                payment_lag=0,
-                payment_lag_exchange=0,
-            ),
-            index_base=100.0,
-            index_fixings=110.0,
-            final_exchange=not only,
-        )
-        result4 = four.cashflows().loc[0, "Cashflow"]
+        # four = ZeroIndexLeg(
+        #     schedule=Schedule(
+        #         effective=dt(2022, 1, 1),
+        #         termination="2Y",
+        #         frequency="Z",
+        #         payment_lag=0,
+        #         payment_lag_exchange=0,
+        #     ),
+        #     index_base=100.0,
+        #     index_fixings=110.0,
+        #     final_exchange=not only,
+        # )
+        # result4 = four.cashflows().loc[0, "Cashflow"]
 
         assert abs(result1 - result2) < 1e-8
         assert abs(result1 - result3) < 1e-8
-        assert abs(result1 - result4) < 1e-8
+        # assert abs(result1 - result4) < 1e-8
 
     @pytest.mark.parametrize(
         ("ini", "final", "mtm", "lenn", "nd_dt", "cf"),
         [
-            (False, False, False, 1, dt(2000, 1, 1), 500e3 * 2.0),
-            (False, False, True, 1, dt(2001, 1, 1), 500e3 * 3.0),
-            (False, True, False, 1, dt(2000, 1, 1), 1.5e6 * 2.0),
-            (False, True, True, 1, dt(2000, 1, 1), 1.5e6 * 2.0),
+            (False, False, "initial", 2, dt(2000, 1, 1), 500e3 * 2.0),
+            (False, False, "payment", 2, dt(2001, 1, 1), 500e3 * 3.0),
+            (False, True, "initial", 2, dt(2000, 1, 1), 1.5e6 * 2.0),
+            (False, True, "payment", 2, dt(2001, 1, 1), 1.5e6 * 3.0),
             # (True, False, False, 2, dt(2000, 1, 1)), # final exch True by default
             # (True, False, True, 2, dt(2000, 1, 1)),  # final exch True by default
-            (True, True, False, 2, dt(2000, 1, 1), 1.5e6 * 2.0),
-            (True, True, True, 2, dt(2000, 1, 1), 1.5e6 * 2.0),
+            (True, True, "initial", 3, dt(2000, 1, 1), 1.5e6 * 2.0),
+            (True, True, "payment", 3, dt(2001, 1, 1), 1.5e6 * 3.0),
         ],
     )
     def test_attributes(self, ini, final, mtm, lenn, nd_dt, cf) -> None:
@@ -1984,17 +2051,19 @@ class TestZeroIndexLeg:
         fixings.add(
             name + "fx_EURUSD", Series(index=[dt(1999, 12, 30), dt(2000, 12, 28)], data=[2.0, 3.0])
         )
-        leg = ZeroIndexLeg(
-            schedule=Schedule(effective=dt(2000, 1, 1), termination=dt(2001, 1, 1), frequency="Z"),
+        leg = ZeroFixedLeg(
+            schedule=Schedule(effective=dt(2000, 1, 1), termination=dt(2001, 1, 1), frequency="A"),
             currency="usd",
             initial_exchange=ini,
-            final_exchange=final,
+            final_exchange=True,
             pair="eurusd",
             mtm=mtm,
             fx_fixings=name + "fx",
             index_lag=0,
             index_fixings=name,
             notional=-1e6,
+            index_only=not final,
+            fixed_rate=0.0,
         )
         assert len(leg.periods) == lenn
         assert leg.periods[-1].non_deliverable_params.delivery == nd_dt

@@ -15,7 +15,7 @@ features = ["pyo3/extension-module"]
 
 [project]
 name = "rateslib"
-version = "2.6.0"
+version = "2.7.0"
 description = "A fixed income library for trading interest rates"
 readme = "README.md"
 authors = [{ name = "J H M Darbyshire"}]
@@ -44,7 +44,7 @@ dev = [
     "mypy>=1.13,<1.20",
     "pandas-stubs>2.0,<4.0",
     # doc building
-    "sphinx>=8.1,<9.0",
+    "sphinx>=9.0,<10.0",
     "sphinx-automodapi>=0.16.0,<1.0",
     "sphinxcontrib-googleanalytics>=0.4,<1.0",
     "sphinx-tabs>=3.4,<4.0",
@@ -81,13 +81,14 @@ exclude = [
     "target",
     "venv9",
     "venv11",
-    "scratch.py",
+    "scratch*.py",
     "__pycache__",
     "docs/source/conf.py",
     "old",
     "build",
     "dist",
     "bench",
+    "benchmarks",
 ]
 # Same as Black.
 line-length = 100
@@ -151,7 +152,7 @@ max-complexity = 14
 files = ["python/"]
 exclude = [
     "python/tests",
-    # "/instruments/bonds/bond_future.py",
+    # "/periods/ir_volatility.py",
 ]
 strict = true
 #packages = [

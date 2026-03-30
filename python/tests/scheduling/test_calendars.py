@@ -233,8 +233,8 @@ def test_modifiers_eom(cal_, modifier, expected) -> None:
         (dt(2022, 1, 1), dt(2022, 4, 1), "ACT360", 0.2465753424657534 * 365 / 360),
         (dt(2022, 1, 1), dt(2022, 4, 1), "30360", 0.250),
         (dt(2022, 1, 1), dt(2022, 4, 1), "30E360", 0.250),
-        (dt(2022, 1, 1), dt(2022, 4, 1), "ACTACT", 0.2465753424657534),
-        (dt(2022, 1, 1), dt(2022, 1, 1), "ACTACT", 0.0),
+        (dt(2022, 1, 1), dt(2022, 4, 1), "ACTACTISDA", 0.2465753424657534),
+        (dt(2022, 1, 1), dt(2022, 1, 1), "ACTACTISDA", 0.0),
         (dt(2022, 1, 1), dt(2023, 1, 31), "1+", 1.0),
         (dt(2022, 1, 1), dt(2024, 2, 28), "1+", 2 + 1 / 12),
         (dt(2022, 1, 1), dt(2022, 4, 1), "BUS252", 0.35714285714285715),
@@ -422,6 +422,15 @@ def test_dcf_actacticma_raises():
         )
 
 
+def test_dcf_actact_raises():
+    with pytest.raises(ValueError, match=r"`ActAct` must be directly specified as `ActActICMA` "):
+        _ = dcf(
+            dt(2022, 2, 28),
+            dt(2023, 2, 28),
+            "actact",
+        )
+
+
 @pytest.mark.parametrize(
     ("start", "end", "expected"),
     [
@@ -593,6 +602,20 @@ def test_add_and_get_custom_calendar_combination() -> None:
     assert result == UnionCal([cal, cal2], [])
     calendars.pop("custom")
     calendars.pop("custom2")
+
+
+@pytest.mark.parametrize("name", ["abc,def", "abc|def"])
+def test_add_fails_on_comma_or_pipe(name):
+    with pytest.raises(
+        ValueError, match=r"`name` cannot contain the comma \(','\) or pipe \('|'\) cha"
+    ):
+        calendars.add(name, Cal([], []))
+
+
+@pytest.mark.parametrize("name", ["tgt", "nyc"])
+def test_add_fails_on_existing(name):
+    with pytest.raises(KeyError, match=r"'`name` already exists in calendars.\\nCannot overwri"):
+        calendars.add(name, Cal([], []))
 
 
 def test_calendar_pop_all_combinations() -> None:
@@ -869,3 +892,15 @@ Su Mo Tu We Th Fr Sa   Su Mo Tu We Th Fr Sa   Su Mo Tu We Th Fr Sa   Su Mo Tu We
 def test_union_cal_try_from_name():
     uc = UnionCal.from_name("ldn,tgt|fed")
     assert isinstance(uc, UnionCal)
+
+
+@pytest.mark.parametrize("number", [-3, -2, -1, 0, 1, 2, 3])
+@pytest.mark.parametrize(
+    "start", [dt(2026, 2, 13), dt(2026, 2, 14), dt(2026, 2, 15), dt(2026, 2, 16)]
+)
+def test_add_bus_days_BusDaysLagSettle_equivalence(number, start):
+    cal = Cal([], [5, 6])
+    adj = Adjuster.BusDaysLagSettle(number)
+    result = cal.adjust(start, adj)
+    expected = cal.lag_bus_days(start, number, True)
+    assert result == expected

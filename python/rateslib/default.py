@@ -21,7 +21,7 @@ import numpy as np
 
 from rateslib._spec_loader import INSTRUMENT_SPECS
 from rateslib.enums.generics import NoInput, _drb
-from rateslib.rs import Adjuster, Convention, NamedCal
+from rateslib.rs import Adjuster, Convention, Frequency, NamedCal
 
 PlotOutput = tuple[plt.Figure, plt.Axes, list[plt.Line2D]]  # type: ignore[name-defined]
 
@@ -54,6 +54,8 @@ DEFAULTS = dict(
     payment_lag=2,
     payment_lag_exchange=0,
     payment_lag_specific={
+        "Fee": 0,
+        "Loan": 0,
         "IRS": 2,
         "STIRFuture": 0,
         "IIRS": 2,
@@ -75,10 +77,13 @@ DEFAULTS = dict(
     },
     fixing_method="rfr_payment_delay",
     spread_compound_method="none_simple",
+    index_base_type="initial",
     base_currency="usd",
     fx_delivery_lag=2,
     fx_delta_type="spot",
     fx_option_metric="pips",
+    ir_option_metric="black_vol_shift_0",
+    ir_option_settlement="physical",
     cds_premium_accrued=True,
     cds_recovery_rate=0.40,
     cds_protection_discretization=23,
@@ -327,6 +332,45 @@ DEFAULTS = dict(
             allow_cross=False,
         ),
     },
+    irs_series={
+        "eur_irs6": dict(
+            currency="eur",
+            settle=Adjuster.BusDaysLagSettle(2),
+            calendar="tgt",
+            modifier=Adjuster.ModifiedFollowing(),
+            convention=Convention.ThirtyE360,
+            leg2_convention=Convention.Act360,
+            frequency=Frequency.Months(12, None),
+            leg2_frequency=Frequency.Months(6, None),
+            leg2_fixing_method="ibor(2)",
+            eom=False,
+            payment_lag=Adjuster.BusDaysLagSettle(0),
+        ),
+        "eur_irs3": dict(
+            currency="eur",
+            settle=Adjuster.BusDaysLagSettle(2),
+            calendar="tgt",
+            modifier=Adjuster.ModifiedFollowing(),
+            convention=Convention.ThirtyE360,
+            leg2_convention=Convention.Act360,
+            frequency=Frequency.Months(12, None),
+            leg2_frequency=Frequency.Months(3, None),
+            leg2_fixing_method="ibor(2)",
+            eom=False,
+            payment_lag=Adjuster.BusDaysLagSettle(0),
+        ),
+        "usd_irs": dict(
+            currency="usd",
+            settle=Adjuster.BusDaysLagSettle(2),
+            calendar="nyc",
+            modifier=Adjuster.ModifiedFollowing(),
+            convention=Convention.Act360,
+            frequency=Frequency.Months(12, None),
+            leg2_fixing_method="rfr_payment_delay",
+            eom=False,
+            payment_lag=Adjuster.BusDaysLagSettle(2),
+        ),
+    },
     float_series={
         "usd_ibor": dict(
             lag=2,
@@ -524,10 +568,13 @@ class Defaults:
     payment_lag_specific: dict[str, int]
     fixing_method: str
     spread_compound_method: str
+    index_base_type: str
     base_currency: str
     fx_delivery_lag: int
     fx_delta_type: str
     fx_option_metric: str
+    ir_option_metric: str
+    ir_option_settlement: str
     cds_premium_accrued: bool
     cds_recovery_rate: float
     cds_protection_discretization: int
@@ -561,6 +608,7 @@ class Defaults:
     # Contact rateslib at gmail.com if this code is observed outside its intended sphere.
     spec: dict[str, dict[str, Any]]
     fx_index: dict[str, Any]
+    irs_series: dict[str, Any]
     float_series: dict[str, Any]
 
     def __new__(cls) -> Defaults:

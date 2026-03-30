@@ -96,7 +96,6 @@ from rateslib.data.fixings import (
 from rateslib.dual import ADOrder, Dual, Dual2, Variable, dual_exp, dual_log, dual_solve, gradient
 from rateslib.enums import FloatFixingMethod, NoInput
 from rateslib.fx import FXForwards, FXRates
-from rateslib.fx_volatility import FXDeltaVolSmile, FXDeltaVolSurface, FXSabrSmile, FXSabrSurface
 from rateslib.instruments import (
     CDS,
     FRA,
@@ -112,6 +111,7 @@ from rateslib.instruments import (
     BillCalcMode,
     BondCalcMode,
     BondFuture,
+    Fee,
     FixedRateBond,
     FloatRateNote,
     Fly,
@@ -125,6 +125,13 @@ from rateslib.instruments import (
     FXSwap,
     FXVolValue,
     IndexFixedRateBond,
+    IRSCall,
+    IRSPut,
+    IRSRiskReversal,
+    IRSStraddle,
+    IRSStrangle,
+    IRVolValue,
+    Loan,
     Portfolio,
     Spread,
     STIRFuture,
@@ -140,7 +147,6 @@ from rateslib.legs import (
     FloatLeg,
     ZeroFixedLeg,
     ZeroFloatLeg,
-    ZeroIndexLeg,
 )
 from rateslib.periods import (
     Cashflow,
@@ -150,6 +156,8 @@ from rateslib.periods import (
     FloatPeriod,
     FXCallPeriod,
     FXPutPeriod,
+    IRSCallPeriod,
+    IRSPutPeriod,
     ZeroFixedPeriod,
     ZeroFloatPeriod,
 )
@@ -179,6 +187,16 @@ from rateslib.splines import (
     bspldnev_single,
     bsplev_single,
 )
+from rateslib.volatility import (
+    FXDeltaVolSmile,
+    FXDeltaVolSurface,
+    FXSabrSmile,
+    FXSabrSurface,
+    IRSabrCube,
+    IRSabrSmile,
+    IRSplineCube,
+    IRSplineSmile,
+)
 
 # module level doc-string
 __doc__ = """
@@ -196,6 +214,7 @@ __all__ = [
     "dt",
     "defaults",
     "fixings",
+    "calendars",
     "licence",
     "from_json",
     # enums.py
@@ -253,11 +272,16 @@ __all__ = [
     "FXIndex",
     "FloatRateIndex",
     "FloatRateSeries",
-    # fx_volatility.py
+    # volatility/fx
     "FXDeltaVolSmile",
     "FXDeltaVolSurface",
     "FXSabrSmile",
     "FXSabrSurface",
+    # volatility/ir
+    "IRSabrSmile",
+    "IRSabrCube",
+    "IRSplineSmile",
+    "IRSplineCube",
     # solver.py
     "Solver",
     # fx.py
@@ -271,6 +295,8 @@ __all__ = [
     "Cashflow",
     "FXCallPeriod",
     "FXPutPeriod",
+    "IRSCallPeriod",
+    "IRSPutPeriod",
     "CreditPremiumPeriod",
     "CreditProtectionPeriod",
     # legs.py
@@ -279,7 +305,6 @@ __all__ = [
     "FloatLeg",
     "ZeroFloatLeg",
     "ZeroFixedLeg",
-    "ZeroIndexLeg",
     "CustomLeg",
     "CreditPremiumLeg",
     "CreditProtectionLeg",
@@ -293,7 +318,10 @@ __all__ = [
     "FRA",
     "Value",
     "FXVolValue",
+    "IRVolValue",
     "Bill",
+    "Fee",
+    "Loan",
     "BillCalcMode",
     "IRS",
     "NDF",
@@ -316,4 +344,9 @@ __all__ = [
     "FXStraddle",
     "FXStrangle",
     "FXBrokerFly",
+    "IRSCall",
+    "IRSPut",
+    "IRSRiskReversal",
+    "IRSStraddle",
+    "IRSStrangle",
 ]
