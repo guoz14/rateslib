@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 from pandas import Series
 
+from rateslib import calendars
 from rateslib.data.fixings import IRSFixing, _get_irs_series
 from rateslib.enums.generics import NoInput
 from rateslib.scheduling import Adjuster, add_tenor
@@ -40,15 +41,28 @@ UTC = timezone.utc
 class _IRVolPricingParams(NamedTuple):
     """Container for parameters for pricing IR options."""
 
-    vol: DualTypes  # vol appropriate for `pricing_model`
-    k: DualTypes  # strike
-    f: DualTypes  # forward
-    shift: DualTypes  # shift to apply to `k` and `f` to use with `vol` in bps
-    t_e: DualTypes  # time to expiry
+    vol: DualTypes
+    """The volatility parameter associated with the specified ``pricing_model``."""
+
+    k: DualTypes
+    """The strike price of the option."""
+
+    f: DualTypes
+    """The mid-market forward rate of underlying."""
+
+    shift: DualTypes
+    """The shift (basis points) applied to the strike and forward under the ``pricing_model``."""
+
+    t_e: DualTypes
+    """The time to expiry used in the pricing formula."""
+
     pricing_model: OptionPricingModel
+    """The specific option pricing formula used for valuation."""
 
     @property
     def rate_shift(self) -> DualTypes:
+        """The shift (rate percentage terms) applied to the strike and forward under
+        the ``pricing_model``."""
         return self.shift / 100.0
 
 
@@ -68,6 +82,7 @@ class _IRSmileMeta:
         _plot_x_axis: str,
         _plot_y_axis: str,
         _pricing_model: OptionPricingModel,
+        _time_scalar: DualTypes,
     ):
         self._eval_date = _eval_date
         self._expiry_input = _expiry_input
@@ -75,6 +90,7 @@ class _IRSmileMeta:
         self._irs_series = _irs_series
         self._plot_x_axis = _plot_x_axis
         self._plot_y_axis = _plot_y_axis
+        self._time_scalar = _time_scalar
         self._irs_fixing = IRSFixing(
             irs_series=self.irs_series,
             publication=self.expiry,
@@ -84,6 +100,11 @@ class _IRSmileMeta:
         )
         self._shift = _shift
         self._pricing_model = _pricing_model
+
+    @property
+    def time_scalar(self) -> DualTypes:
+        """A quantity to multiple calendar day time to expiry to remap time."""
+        return self._time_scalar
 
     @property
     def pricing_model(self) -> OptionPricingModel:
@@ -156,18 +177,18 @@ class _IRSmileMeta:
         return self._irs_fixing
 
     @cached_property
-    def t_expiry(self) -> float:
-        """Calendar days from eval to expiry divided by 365."""
-        return (self.expiry - self.eval_date).days / 365.0
+    def t_expiry(self) -> DualTypes:
+        """Calendar days from eval to expiry divided by 365 multiplied by remapping."""
+        return (self.expiry - self.eval_date).days / 365.0 * self.time_scalar
 
-    def _t_expiry(self, expiry: datetime) -> float:
-        """Calendar days from eval to specified expiry divided by 365."""
-        return (expiry - self.eval_date).days / 365.0
+    def _t_expiry(self, expiry: datetime) -> DualTypes:
+        """Calendar days from eval to specified expiry divided by 365 multiplied by remapping."""
+        return (expiry - self.eval_date).days / 365.0 * self.time_scalar
 
     @cached_property
-    def t_expiry_sqrt(self) -> float:
+    def t_expiry_sqrt(self) -> DualTypes:
         """Square root of ``t_expiry``."""
-        ret: float = self.t_expiry**0.5
+        ret: DualTypes = self.t_expiry**0.5
         return ret
 
 
@@ -186,11 +207,22 @@ class _IRCubeMeta:
     _shift: DualTypes
     _indexes: list[Any]
     _smile_params: dict[str, Any]
+    _pricing_model: OptionPricingModel
 
     def __post_init__(self) -> None:
         for idx in range(1, len(self.expiries)):
             if self.expiry_dates[idx - 1] >= self.expiry_dates[idx]:
                 raise ValueError("Cube `expiries` are not sorted or contain duplicates.\n")
+        if not isinstance(self._weights, NoInput):
+            object.__setattr__(
+                self,
+                "_weights",
+                _scale_weights(
+                    eval_date=self.eval_date,
+                    weights=self._weights,
+                    expiries=self.expiry_dates,
+                ),
+            )
 
     @property
     def shift(self) -> DualTypes:
@@ -231,13 +263,15 @@ class _IRCubeMeta:
         return self._weights
 
     @cached_property
-    def weights_cum(self) -> Series[float] | NoInput:
+    def time_scalars(self) -> Series[float] | NoInput:
         """Weight adjusted time to expiry (in calendar days) per date for temporal volatility
         interpolation."""
         if isinstance(self.weights, NoInput):
-            return self.weights
+            return NoInput(0)
         else:
-            return self.weights.cumsum()
+            c = Series(index=self.weights.index, data=1.0)
+            c.iloc[0] = 0.0
+            return self.weights.cumsum() / c.cumsum()
 
     @property
     def tenors(self) -> list[str]:
@@ -318,6 +352,11 @@ class _IRCubeMeta:
     def eval_date(self) -> datetime:
         """Evaluation date of the *Surface*."""
         return self._eval_date
+
+    @property
+    def pricing_model(self) -> OptionPricingModel:
+        """The option pricing model associated with this *Cube's* volatility output."""
+        return self._pricing_model
 
 
 def _get_ir_expiry_and_payment(
@@ -480,3 +519,55 @@ def _bilinear_interp(
         + bl * (1 - h[1]) * v[0]
         + br * h[1] * v[1]
     )
+
+
+def _scale_weights(
+    eval_date: datetime,
+    weights: Series[float],
+    expiries: list[datetime],
+) -> Series[float]:
+    # the last weight is considered the end point of interest
+    w = weights.sort_index(ascending=True)  # sorted input
+    del weights
+    d = calendars.get("all").cal_date_range(eval_date, w.index[-1])
+    s = Series(data=1.0, index=d)
+    s.update(w)
+    s.update(Series(index=[eval_date], data=0.0))
+    c = s.cumsum()
+    adj_expiries = [eval_date] + expiries
+    for i, expiry in enumerate(adj_expiries):
+        if i == 0:
+            continue
+        if expiry < s.index[-1]:
+            # this expiry is within the middle of the weights series
+            left_index = (adj_expiries[i - 1] - eval_date).days
+            right_index = (expiry - adj_expiries[i - 1]).days + left_index
+            left_count = c[adj_expiries[i - 1]]
+            right_count = c[adj_expiries[i]]
+            s.iloc[left_index + 1 : right_index + 1] *= (right_index - left_index) / (
+                right_count - left_count
+            )
+        elif adj_expiries[i - 1] < s.index[-1]:
+            # the weights extend beyond the last expiry but to to the present expiry
+            left_index = (adj_expiries[i - 1] - eval_date).days
+            right_index = (s.index[-1] - adj_expiries[i - 1]).days + left_index
+            left_count = c[adj_expiries[i - 1]]
+            right_count = c[s.index[-1]]
+            s.iloc[left_index + 1 : right_index + 1] *= (right_index - left_index) / (
+                right_count - left_count
+            )
+        else:
+            # the weights have been exhausted
+            break
+
+    if s.index[-1] > expiries[-1]:
+        # scale the weights beyond last expiry
+        left_index = (adj_expiries[-1] - eval_date).days
+        right_index = (s.index[-1] - adj_expiries[-1]).days + left_index
+        left_count = c[adj_expiries[-1]]
+        right_count = c[s.index[-1]]
+        s.iloc[left_index + 1 : right_index + 1] *= (right_index - left_index) / (
+            right_count - left_count
+        )
+
+    return s

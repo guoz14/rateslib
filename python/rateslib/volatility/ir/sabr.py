@@ -56,6 +56,9 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
     Create an *IR Volatility Smile* at a given expiry indexed for a specific IRS tenor
     using SABR parameters.
 
+    An *IRSabrSmile* is intended as a grid point element of the more general
+    :class:`~rateslib.volatility.IRSabrCube`, which users are recommended to use instead.
+
     .. warning::
 
        *Swaptions* and *IR Volatility* are in Beta status introduced in v2.7.0
@@ -63,6 +66,44 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
     .. role:: green
 
     .. role:: red
+
+    .. rubric:: Examples
+
+    .. ipython:: python
+       :suppress:
+
+       from rateslib import IRSabrSmile, dt
+
+    .. ipython:: python
+
+       irss = IRSabrSmile(
+           eval_date=dt(2000, 1, 1),
+           expiry=dt(2000, 7, 1),
+           tenor="1y",
+           irs_series="usd_irs",
+           beta=0.5,
+           nodes=dict(alpha=0.2, rho=-0.05, nu=0.65),
+           shift=0.0,
+       )
+       irss.plot(f=2.5513, x_axis="strike", y_axis="normal_vol")
+
+    .. plot::
+
+       from rateslib import IRSabrSmile, dt
+       irss = IRSabrSmile(
+           eval_date=dt(2000, 1, 1),
+           expiry=dt(2000, 7, 1),
+           tenor="1y",
+           irs_series="usd_irs",
+           beta=0.5,
+           nodes=dict(alpha=0.2, rho=-0.05, nu=0.65),
+           shift=0.0,
+       )
+       fig, ax, lines = irss.plot(f=2.5513, x_axis="strike", y_axis="normal_vol")
+       plt.show()
+       plt.close()
+
+    For further examples see :ref:`Constructing a Smile <c-ir-smile-constructing-doc>`.
 
     Parameters
     ----------
@@ -83,6 +124,9 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
     shift: float, Variable, :green:`optional (set as zero)`
         The number of basis points to apply to the strike and forward under a 'Black Shifted
         Volatility' model.
+    time_scalar: float, Dual, Dual2, Variable, :green:`optional (set as one)`
+        A quantity to remap calendar day time to expiry from ``eval_date`` to another measure
+        of time.
     id: str, optional, :green:`optional (set as random)`
         The unique identifier to distinguish between *Smiles* in a multicurrency framework
         and/or *Surface*.
@@ -94,6 +138,9 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
 
     Notes
     -----
+    A SABR model uses a (shifted) Black (log-normal) volatility with a Black-76 option pricing
+    formula.
+
     The keys for ``nodes`` are described as the following:
 
     - ``alpha``: The initial volatility parameter (e.g. 0.10 for 10%) of the SABR model,
@@ -110,10 +157,6 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
     :class:`~rateslib.solver.Solver`. This value can be entered either as a *float*, or a
     :class:`~rateslib.dual.Variable` to capture exogenous sensitivities.
 
-    Examples
-    --------
-    See :ref:`Constructing a Smile <c-fx-smile-constructing-doc>`.
-
     """
 
     @_new_state_post
@@ -127,6 +170,7 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
         tenor: datetime | str,
         *,
         shift: DualTypes_ = NoInput(0),
+        time_scalar: DualTypes_ = NoInput(0),
         id: str | NoInput = NoInput(0),  # noqa: A002
         ad: int | None = 0,
     ):
@@ -142,6 +186,7 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
             _plot_y_axis="black_vol",
             _shift=_drb(0.0, shift),
             _pricing_model=OptionPricingModel.Black76,
+            _time_scalar=_drb(1.0, time_scalar),
         )
 
         try:
@@ -198,7 +243,7 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
         derivative: int
             For with respect to `k` use 1, or `f` use 2.
         """
-        t_e = (expiry - self._meta.eval_date).days / 365.0
+        t_e = _to_number(self.meta.t_expiry)
         K = k + self.meta.rate_shift
         F = f + self.meta.rate_shift
         del k, f
@@ -326,14 +371,19 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
 
     @property
     def ad(self) -> int:
+        """Int in {0,1,2} describing the AD order associated with the
+        :class:`~rateslib.volatility._BaseIRSmile`."""
         return self._ad
 
     @property
     def pricing_params(self) -> tuple[float | Dual | Dual2 | Variable, ...]:
+        """An ordered set of pricing parameters associated with the
+        :class:`~rateslib.volatility._BaseIRSmile`."""
         return self.nodes.alpha, self.nodes.rho, self.nodes.nu
 
     @property
     def meta(self) -> _IRSmileMeta:
+        """An instance of :class:`~rateslib.volatility.ir.utils._IRSmileMeta`."""
         return self._meta
 
     def _get_from_strike(self, k: DualTypes, f: DualTypes) -> _IRVolPricingParams:
@@ -361,7 +411,7 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
         vol_ = _SabrModel._d_sabr_d_k_or_f(
             _to_number(k + self.meta.rate_shift),
             _to_number(f + self.meta.rate_shift),
-            self._meta.t_expiry,
+            _to_number(self._meta.t_expiry),
             self.nodes.alpha,
             self.nodes.beta,
             self.nodes.rho,
@@ -377,17 +427,78 @@ class IRSabrSmile(_BaseIRSmile, _WithMutability):
             t_e=self._meta.t_expiry,
         )
 
+    def _d_sigma_d_f(
+        self,
+        k: DualTypes,
+        f: DualTypes,
+    ) -> DualTypes:
+        """
+        Calculate the derivative :math:`\frac{d \\sigma}{d f}` for a generic spline model.
+        """
+        return _SabrModel._d_sabr_d_k_or_f(  # type: ignore[return-value]
+            _to_number(k + self.meta.rate_shift),
+            _to_number(f + self.meta.rate_shift),
+            _to_number(self._meta.t_expiry),
+            self.nodes.alpha,
+            self.nodes.beta,
+            self.nodes.rho,
+            self.nodes.nu,
+            derivative=2,
+        )[1]
+
 
 class IRSabrCube(_BaseIRCube[str], _WithMutability):
     r"""
     Create an *IR Volatility Cube* parametrized by :class:`~rateslib.volatility.IRSabrSmile` at
-    different expiries and *IRS* tenors.
+    different *expiries* and *IRS* *tenors*.
 
     .. warning::
 
        *Swaptions* and *IR Volatility* are in Beta status introduced in v2.7.0
 
-    See also the :ref:`IR Vol Smiles & Cubes <c-ir-smile-doc>` section in the user guide.
+    .. rubric:: Examples
+
+    .. ipython:: python
+       :suppress:
+
+       from rateslib import IRSabrCube, dt
+
+    .. ipython:: python
+
+       irsc = IRSabrCube(
+           eval_date=dt(2000, 1, 1),
+           expiries=["3m", "1y"],
+           tenors=["1y", "2y"],
+           irs_series="usd_irs",
+           beta=0.5,
+           alpha=[[0.21, 0.22], [0.20, 0.20]],
+           rho=-0.05,  # <-- applied to all values in the array
+           nu=[[0.5, 0.55], [0.65, 0.65]],
+       )
+       irss = irsc.get_smile("6m", "1y")
+       irss.plot(f=2.5513, x_axis="strike", y_axis="normal_vol")
+
+    .. plot::
+
+       from rateslib import IRSabrCube, dt
+       irsc = IRSabrCube(
+           eval_date=dt(2000, 1, 1),
+           expiries=["3m", "1y"],
+           tenors=["1y", "2y"],
+           irs_series="usd_irs",
+           beta=0.5,
+           alpha=[[0.21, 0.22], [0.20, 0.20]],
+           rho=-0.05,  # <-- applied to all values in the array
+           nu=[[0.5, 0.55], [0.65, 0.65]],
+       )
+       irss = irsc.get_smile("6m", "1y")
+       fig, ax, lines = irss.plot(f=2.5513, x_axis="strike", y_axis="normal_vol")
+       plt.show()
+       plt.close()
+
+
+    For further information see also the
+    :ref:`IR Vol Smiles & Cubes <c-ir-smile-doc>` section in the user guide.
 
     .. role:: green
 
@@ -413,11 +524,12 @@ class IRSabrCube(_BaseIRCube[str], _WithMutability):
         underlying :class:`~rateslib.instruments.IRS` that the swaptions are settled against.
     beta: float, Variable, :red:`required`
         The beta, :math:`\beta`, parameter of the SABR model.
-    weights: Series, optional
-       Weights used for temporal volatility interpolation. See notes.
-    id: str, optional
+    weights: Series, :green:`optional`
+       Weights used for temporal volatility interpolation. Please see
+       :ref:`IR vol time remapping <cook-ir-vol-time-doc>` before using this argument.
+    id: str, :green:`optional`
        The unique identifier to label the *Surface* and its variables.
-    ad: int, optional
+    ad: int, :green:`optional`
        Sets the automatic differentiation order. Defines whether to convert node
        values to float, :class:`~rateslib.dual.Dual` or
        :class:`~rateslib.dual.Dual2`. It is advised against
@@ -425,7 +537,9 @@ class IRSabrCube(_BaseIRCube[str], _WithMutability):
 
     Notes
     -----
-    TBD
+    SABR parameters for any **(expiry, tenor)** pair are bilinearly interpolated from
+    immediately neighbouring grid points. Grid points outside of the domain of the given
+    ``expiries`` and ``tenors`` assume values from the singular nearest grid point.
     """
 
     _ini_solve = 0
@@ -461,6 +575,7 @@ class IRSabrCube(_BaseIRCube[str], _WithMutability):
             _shift=_drb(0.0, shift),
             _indexes=["alpha", "rho", "nu"],
             _smile_params=dict(beta=beta),
+            _pricing_model=OptionPricingModel.Black76,
         )
 
         _shape = (self.meta._n_expiries, self.meta._n_tenors)

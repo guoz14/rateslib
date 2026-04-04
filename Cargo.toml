@@ -1,17 +1,13 @@
 [package]
 name = "rateslib"
-version = "2.7.0"
+version = "2.7.1"
 edition = "2021"
 exclude = [
     ".github/*",
     "benches/*",
     "benchmarks/*",
     "notebooks/*",
-    ".readthedocs.yaml",
     "docs/*",
-    "PACKAGING.md",
-    "PIP_FREEZE.txt",
-    "requirements-minimum.txt",
     "robots.txt",
 ]
 

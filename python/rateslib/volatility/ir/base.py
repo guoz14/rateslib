@@ -181,11 +181,12 @@ class _WithMutability(ABC):
 
 class _BaseIRSmile(_WithState, _WithCache[float, DualTypes], ABC):
     """
-    Abstract base class for implementing *IR Smiles*.
+    Abstract base class for implementing *IR Volatility Smiles*.
 
     Any :class:`~rateslib.volatility._BaseIRSmile` is required to implement the following
     **properties**:
 
+    - **id** (str)
     - **ad** (int)
     - **meta** (:class:`~rateslib.volatility._IRSmileMeta`)
     - **pricing_params** (Iterable[float | Dual | Dual2 | Variable])
@@ -195,6 +196,7 @@ class _BaseIRSmile(_WithState, _WithCache[float, DualTypes], ABC):
 
     - **_plot(x_axis, f, y_axis, curves)**
     - **_get_from_strike(k, f, curves)**
+    - **_d_sigma_d_f(k, f)**
 
     The directly provided methods with these implementations are:
 
@@ -266,6 +268,17 @@ class _BaseIRSmile(_WithState, _WithCache[float, DualTypes], ABC):
         tgt_shift: float_,
     ) -> tuple[Iterable[float], Iterable[float]]:
         """Perform the necessary calculation to derive (x,y) coordinates for a chart."""
+        pass
+
+    @abstractmethod
+    def _d_sigma_d_f(
+        self,
+        k: DualTypes,
+        f: DualTypes,
+    ) -> DualTypes:
+        """
+        Calculate the derivative :math:`\frac{d \\sigma}{d f}` for a generic spline model.
+        """
         pass
 
     def _plot_conversion(
@@ -471,11 +484,12 @@ class _BaseIRSmile(_WithState, _WithCache[float, DualTypes], ABC):
 
 class _BaseIRCube(Generic[T], _WithState, _WithCache[tuple[datetime, datetime], _BaseIRSmile], ABC):
     """
-    Abstract base class for implementing *IR Cubes*.
+    Abstract base class for implementing *IR Volatility Cubes*.
 
     Any :class:`~rateslib.volatility._BaseIRCube` is required to implement the following
     **properties**:
 
+    - **id** (str)
     - **ad** (int)
     - **meta** (:class:`~rateslib.volatility._IRCubeMeta`)
     - **pricing_params** (3D ndarray)
@@ -660,6 +674,14 @@ class _BaseIRCube(Generic[T], _WithState, _WithCache[tuple[datetime, datetime], 
         tenor: datetime,
         params: Sequence[DualTypes] | Arr1dObj,
     ) -> _BaseIRSmile:
+        if isinstance(self.meta.time_scalars, NoInput):
+            ts: DualTypes_ = NoInput(0)
+        else:
+            if expiry > self.meta.time_scalars.index[-1]:
+                ts = NoInput(0)
+            else:
+                ts = self.meta.time_scalars[expiry]
+
         return self._SmileType(  # type: ignore[call-arg]
             nodes=dict(zip(self.meta.indexes, params, strict=True)),
             eval_date=self.meta.eval_date,
@@ -668,6 +690,7 @@ class _BaseIRCube(Generic[T], _WithState, _WithCache[tuple[datetime, datetime], 
             tenor=tenor,
             shift=self.meta.shift,
             ad=None,  # inherit the AD variables from the params
+            time_scalar=ts,
             **self.meta.smile_params,
         )
 
