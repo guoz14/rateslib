@@ -1,4 +1,4 @@
-LICENSE
+LICENCE
 =======
 Dual Licensing – Source-Available Non-Commercial Licence
 and Commercial Subscription Licence
@@ -96,20 +96,29 @@ To obtain a Commercial Subscription Licence, visit https://rateslib.com/licence
   No patent, trademark, or other intellectual property rights are granted under the
   Non-Commercial Source-Available Licence.
 
-4. Disclaimer of Warranty
+4. Restriction on Machine Learning, AI Training and Generative AI
+-----------------------------------------------------------------
+
+  The Source Code and all related assets in this repository may not be used, directly or indirectly,
+  for the purpose of training, developing, or improving any artificial intelligence,
+  machine learning model, or large language model. This includes, but is not limited to,
+  using the Source Code for data mining, scraping, or as part of a training dataset for generative
+  AI tools. Any such use is an unauthorized reproduction and a violation of this license.
+
+5. Disclaimer of Warranty
 -------------------------
 
   THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
   BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
   AND NON-INFRINGEMENT.
 
-5. Limitation of Liability
+6. Limitation of Liability
 --------------------------
 
   TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR
   ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR IN CONNECTION WITH THE USE OF THE SOFTWARE.
 
-6. Governing Law
+7. Governing Law
 ----------------
 
   This licence and any dispute arising out of or in connection with it shall be governed by and
@@ -119,19 +128,19 @@ To obtain a Commercial Subscription Licence, visit https://rateslib.com/licence
   Nothing in this section limits the copyright holder’s right to seek injunctive or equitable
   relief in any jurisdiction.
 
-7. Severability
+8. Severability
 ---------------
 
   If any provision of this licence is held to be invalid, illegal, or unenforceable by a court of
   competent jurisdiction, the remaining provisions shall remain in full force and effect.
 
-8. No Waiver
+9. No Waiver
 ------------
 
   Failure to enforce any provision of this licence shall not constitute a waiver of future
   enforcement of that or any other provision.
 
-9. Language
+10. Language
 -----------
 
   This licence is written in English. Any translations are provided for convenience only.
